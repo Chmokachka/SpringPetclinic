@@ -1,0 +1,10 @@
+[Unit]
+Description=My Java WebAPP
+
+[Service]
+User=root
+WorkingDirectory=/SpringPetclinic
+ExecStart=/SpringPetclinic/start
+
+[Install]
+WantedBy=multi-user.target
