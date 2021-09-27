@@ -1,0 +1,30 @@
+[
+    {
+      "name": "app",
+      "image": "140625812000.dkr.ecr.eu-central-1.amazonaws.com/pet-without-db",
+      "cpu": 1024,
+      "memory": 2048,
+      "networkMode": "awsvpc",
+      "environment": [
+        {
+          "name": "DB_URL",
+          "value": "${aws_db_instance.default.address}"
+        }
+      ],
+    "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/testapp",
+          "awslogs-region": "eu-central-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+    },
+    "portMappings": [
+      {
+        "containerPort": 8080,
+        "hostPort": 8080
+      }
+    ]
+  }
+]
+
