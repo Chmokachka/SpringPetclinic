@@ -34,10 +34,10 @@ locals {
 }
 
 data "template_file" "task_definitions" {
-  template = "${file("task-definitions/service.json")}"
+  template = file("task-definitions/service.json")
   vars = {
-    db_url = "${aws_db_instance.default.address}"
-    cloudw = "${aws_cloudwatch_log_group.testapp_log_group.id}"
+    db_url  = "${aws_db_instance.default.address}"
+    cloudw  = "${aws_cloudwatch_log_group.testapp_log_group.id}"
     api_key = "${local.api.api_key}"
   }
 }
@@ -107,26 +107,10 @@ resource "aws_ecs_task_definition" "test-def" {
   family                   = "testapp-task"
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
   network_mode             = "awsvpc"
-  requires_compatibilities = ["EC2"]
+  requires_compatibilities = ["FARGATE"]
   cpu                      = 2048
   memory                   = 4096
   container_definitions    = data.template_file.task_definitions.rendered
-  volume {
-    name = "docker_sock"
-    host_path = "/var/run/docker.sock"
-  }
-  volume {
-    name = "proc"
-    host_path = "/proc/"
-  }
-  volume {
-    name = "pointdir"
-    host_path = "/opt/datadog-agent/run"
-  }
-  volume {
-    name = "cgroup"
-    host_path = "/cgroup/"
-  }
 }
 
 resource "aws_ecs_service" "test-service" {
@@ -134,10 +118,12 @@ resource "aws_ecs_service" "test-service" {
   cluster         = aws_ecs_cluster.default.id
   task_definition = aws_ecs_task_definition.test-def.arn
   desired_count   = 1
+  launch_type     = "FARGATE"
 
   network_configuration {
     security_groups  = [aws_security_group.ecs_sg.id]
-    subnets          = [aws_subnet.pub_a.id,aws_subnet.pub_b.id]
+    subnets          = [aws_subnet.pub_a.id, aws_subnet.pub_b.id]
+    assign_public_ip = true
   }
 
   load_balancer {
@@ -209,8 +195,8 @@ resource "aws_appautoscaling_policy" "ecs_policy_up" {
 #------------------
 
 resource "aws_alb" "alb" {
-  name           = "myapp-load-balancer"
-  subnets        = [aws_subnet.pub_a.id, aws_subnet.pub_b.id]
+  name            = "myapp-load-balancer"
+  subnets         = [aws_subnet.pub_a.id, aws_subnet.pub_b.id]
   security_groups = [aws_security_group.alb-sg.id]
 }
 
@@ -267,8 +253,8 @@ resource "aws_db_instance" "default" {
   engine_version         = "5.7"
   instance_class         = "db.t3.micro"
   name                   = "petclinic"
-  username = local.db_creds.username
-  password = local.db_creds.password
+  username               = local.db_creds.username
+  password               = local.db_creds.password
   parameter_group_name   = "default.mysql5.7"
   db_subnet_group_name   = aws_db_subnet_group.db_subnet.id
   vpc_security_group_ids = ["${aws_security_group.db.id}"]
