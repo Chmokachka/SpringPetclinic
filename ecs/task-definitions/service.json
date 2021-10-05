@@ -1,20 +1,79 @@
 [
+  {
+    "name": "datadog-agent",
+    "image": "datadog/agent:7.31.1",
+    "cpu": 10,
+    "memory": 256,
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "${cloudw}",
+        "awslogs-region": "eu-central-1",
+        "awslogs-stream-prefix": "datadog"
+      }
+  },
+  "mountPoints": [
     {
-      "name": "app",
-      "image": "140625812000.dkr.ecr.eu-central-1.amazonaws.com/pet-without-db",
-      "cpu": 1024,
-      "memory": 2048,
-      "networkMode": "awsvpc",
-      "environment": [
-        {
-          "name": "DB_URL",
-          "value": "${aws_db_instance.default.address}"
-        }
-      ],
+      "containerPath": "/var/run/docker.sock",
+      "sourceVolume": "docker_sock",
+      "readOnly": true
+    },
+    {
+      "containerPath": "/host/sys/fs/cgroup",
+      "sourceVolume": "cgroup",
+      "readOnly": true
+    },
+    {
+      "containerPath": "/opt/datadog-agent/run",
+      "sourceVolume": "pointdir",
+      "readOnly": false
+    },
+    {
+      "containerPath": "/host/proc",
+      "sourceVolume": "proc",
+      "readOnly": true
+    }
+  ],
+    "environment": [
+      {
+        "name": "DD_API_KEY",
+        "value": "${api_key}"
+      },
+      {
+        "name": "DD_LOGS_ENABLED",
+        "value": "true"
+      },
+      {
+        "name": "DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL",
+        "value": "true"
+      },
+      {
+        "name": "DD_SITE",
+        "value": "datadoghq.eu" 
+      },
+      {
+        "name": "SD_BACKEND",
+        "value": "docker"
+      }
+    ]
+},
+  {
+    "name": "app",
+    "image": "140625812000.dkr.ecr.eu-central-1.amazonaws.com/spring-petclinic",
+    "cpu": 1024,
+    "memory": 2048,
+    "essential": true,
+    "networkMode": "awsvpc",
+    "environment": [
+      {
+        "name": "DB_URL",
+        "value": "${db_url}"
+      }
+    ],
     "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "/ecs/testapp",
+          "awslogs-group": "${cloudw}",
           "awslogs-region": "eu-central-1",
           "awslogs-stream-prefix": "ecs"
         }
@@ -27,4 +86,3 @@
     ]
   }
 ]
-
