@@ -1,83 +1,49 @@
 [
   {
-    "name": "datadog-agent",
-    "image": "datadog/agent:7.31.1",
-    "cpu": 10,
-    "memory": 256,
-    "logConfiguration": {
-      "logDriver": "awslogs",
-      "options": {
-        "awslogs-group": "${cloudw}",
-        "awslogs-region": "eu-central-1",
-        "awslogs-stream-prefix": "datadog"
-      }
-  },
-  "mountPoints": [
-    {
-      "containerPath": "/var/run/docker.sock",
-      "sourceVolume": "docker_sock",
-      "readOnly": true
-    },
-    {
-      "containerPath": "/host/sys/fs/cgroup",
-      "sourceVolume": "cgroup",
-      "readOnly": true
-    },
-    {
-      "containerPath": "/opt/datadog-agent/run",
-      "sourceVolume": "pointdir",
-      "readOnly": false
-    },
-    {
-      "containerPath": "/host/proc",
-      "sourceVolume": "proc",
-      "readOnly": true
-    }
-  ],
-    "environment": [
-      {
-        "name": "DD_API_KEY",
-        "value": "${api_key}"
-      },
-      {
-        "name": "DD_LOGS_ENABLED",
-        "value": "true"
-      },
-      {
-        "name": "DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL",
-        "value": "true"
-      },
-      {
-        "name": "DD_SITE",
-        "value": "datadoghq.eu" 
-      },
-      {
-        "name": "SD_BACKEND",
-        "value": "docker"
-      }
-    ]
-},
-  {
-    "name": "app",
-    "image": "140625812000.dkr.ecr.eu-central-1.amazonaws.com/spring-petclinic",
-    "cpu": 1024,
-    "memory": 2048,
     "essential": true,
-    "networkMode": "awsvpc",
-    "environment": [
-      {
-        "name": "DB_URL",
-        "value": "${db_url}"
+    "image": "amazon/aws-for-fluent-bit:latest",
+    "name": "log_router",
+    "firelensConfiguration": {
+      "type": "fluentbit",
+      "options": {
+        "config-file-type": "file",
+        "config-file-value": "/fluent-bit/configs/parse-json.conf",
+        "enable-ecs-log-metadata": "true"
       }
-    ],
+    },
     "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
           "awslogs-group": "${cloudw}",
           "awslogs-region": "eu-central-1",
-          "awslogs-stream-prefix": "ecs"
+          "awslogs-stream-prefix": "datadog"
         }
+      }
     },
+    {
+      "name": "app",
+      "image": "140625812000.dkr.ecr.eu-central-1.amazonaws.com/pet-without-db",
+      "cpu": 1024,
+      "memory": 2048,
+      "networkMode": "awsvpc",
+      "environment": [
+        {
+          "name": "DB_URL",
+          "value": "${db_url}"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awsfirelens",
+        "options": {
+          "Name": "datadog",
+          "apikey": "${api_key}",
+          "dd_service": "firelens-test",
+          "dd_source": "redis",
+          "dd_tags": "project:fluentbit",
+          "provider": "ecs",
+          "Host": "http-intake.logs.datadoghq.eu"
+        }
+      },
     "portMappings": [
       {
         "containerPort": 8080,
