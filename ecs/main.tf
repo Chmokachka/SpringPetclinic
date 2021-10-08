@@ -1,7 +1,18 @@
 provider "aws" {
   region = "eu-central-1"
 }
-
+terraform {
+  required_providers {
+    datadog = {
+      source = "DataDog/datadog"
+    }
+  }
+}
+provider "datadog" {
+  api_key = local.api_key.api_key
+  app_key = local.app_key.app_key
+  api_url = local.api_url.api_url
+}
 
 data "aws_availability_zones" "available" {}
 
@@ -24,12 +35,28 @@ data "aws_secretsmanager_secret_version" "dd_api" {
   secret_id = "api_key"
 }
 
+data "aws_secretsmanager_secret_version" "app_key" {
+  # Fill in the name you gave to your secret
+  secret_id = "app_key"
+}
+
+data "aws_secretsmanager_secret_version" "api_url" {
+  # Fill in the name you gave to your secret
+  secret_id = "api_url"
+}
+
 locals {
   db_creds = jsondecode(
     data.aws_secretsmanager_secret_version.creds.secret_string
   )
-  api = jsondecode(
+  api_key = jsondecode(
     data.aws_secretsmanager_secret_version.dd_api.secret_string
+  )
+  app_key = jsondecode(
+    data.aws_secretsmanager_secret_version.app_key.secret_string
+  )
+  api_url = jsondecode(
+    data.aws_secretsmanager_secret_version.api_url.secret_string
   )
 }
 
@@ -38,11 +65,56 @@ data "template_file" "task_definitions" {
   vars = {
     db_url  = "${aws_db_instance.default.address}"
     cloudw  = "${aws_cloudwatch_log_group.testapp_log_group.id}"
-    api_key = "${local.api.api_key}"
+    api_key = "${local.api_key.api_key}"
+  }
+}
+
+data "template_file" "user_data" {
+  template = file("user_data.sh")
+  vars = {
+    alb_url = aws_alb.alb.dns_name
+    api_key = "${local.api_key.api_key}"
   }
 }
 #--------------------------------------------------------------
 
+resource "datadog_monitor" "foo" {
+  name               = "Pet monitor"
+  type               = "service check"
+  message            = "Monitor triggered. Notify: @karakrech7@gmail.com"
+  escalation_message = "Escalation message @karkarech7@gmail.com"
+
+  query = "\"http.can_connect\".over(\"instance:my_service\",\"url:http://${aws_alb.alb.dns_name}\").by(\"host\",\"instance\",\"url\").last(4).count_by_status()"
+  monitor_thresholds {
+    warning           = 2
+    warning_recovery  = 1
+    critical          = 4
+    critical_recovery = 3
+  }
+
+  notify_no_data    = false
+  renotify_interval = 60
+
+  notify_audit = false
+  timeout_h    = 60
+  include_tags = true
+}
+
+
+resource "datadog_service_level_objective" "foo" {
+  name        = "petclinic"
+  type        = "monitor"
+  monitor_ids = [datadog_monitor.foo.id]
+
+  thresholds {
+    timeframe       = "7d"
+    target          = 99
+    warning         = 99.9
+  }
+  
+}
+
+#-----------------------------------------------------
 resource "aws_security_group" "alb-sg" {
   name        = "testapp-load-balancer-security-group"
   description = "controls access to the ALB"
@@ -226,6 +298,68 @@ resource "aws_alb_listener" "testapp" {
   default_action {
     type             = "forward"
     target_group_arn = aws_alb_target_group.myapp-tg.arn
+  }
+}
+#----------------------
+resource "aws_launch_configuration" "web" {
+  //  name            = "WebServer-Highly-Available-LC"
+  name_prefix     = "WebServer-Highly-Available-LC-"
+  image_id        = data.aws_ami.latest_amazon_linux.id
+  instance_type   = "t2.micro"
+  security_groups = [aws_security_group.web.id]
+  user_data       = data.template_file.user_data.rendered
+  depends_on      = [aws_alb.alb]
+}
+
+resource "aws_autoscaling_group" "web" {
+  name                 = "ASG-${aws_launch_configuration.web.name}"
+  launch_configuration = aws_launch_configuration.web.name
+  min_size             = 2
+  max_size             = 2
+  min_elb_capacity     = 2
+  health_check_type    = "ELB"
+  vpc_zone_identifier  = [aws_subnet.pub_a.id, aws_subnet.pub_b.id]
+  depends_on           = [aws_alb.alb]
+  dynamic "tag" {
+    for_each = {
+      Name   = "WebServer in ASG"
+      TAGKEY = "TAGVALUE"
+    }
+    content {
+      key                 = tag.key
+      value               = tag.value
+      propagate_at_launch = true
+    }
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_security_group" "web" {
+  name       = "Dynamic Security Group"
+  vpc_id     = aws_vpc.main.id
+  depends_on = [aws_vpc.main]
+
+  dynamic "ingress" {
+    for_each = ["8125", "22", "5000"]
+    content {
+      from_port   = ingress.value
+      to_port     = ingress.value
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "Dynamic SecurityGroup"
   }
 }
 
