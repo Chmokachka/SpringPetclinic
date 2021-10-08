@@ -1,5 +1,57 @@
 [
   {
+    "name": "datadog-agent",
+    "image": "public.ecr.aws/datadog/agent:latest",
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "${cloudw}",
+        "awslogs-region": "eu-central-1",
+        "awslogs-stream-prefix": "datadog"
+      }
+    },
+    "environment": [
+      {
+        "name": "DD_API_KEY",
+        "value": "${api_key}"
+      },
+      {
+        "name": "DD_LOGS_ENABLED",
+        "value": "true"
+      },
+      {
+        "name": "DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL",
+        "value": "true"
+      },
+      {
+        "name": "DD_CONTAINER_EXCLUDE_LOGS",
+        "value": "name:datadog-agent"
+      },
+      {
+        "name": "DD_SITE",
+        "value": "datadoghq.eu"
+      },
+      {
+        "name": "ECS_FARGATE",
+        "value": "true"
+      },
+      {
+        "name": "DD_SYSTEM_PROBE_ENABLED",
+        "value": "true"
+      }
+    ],
+    "linuxParameters": {
+      "capabilities": {
+        "drop": [
+          "SYS_ADMIN",
+          "SYS_RESOURCE",
+          "SYS_PTRACE",
+          "NET_ADMIN"
+        ]
+      }
+    }
+  },
+  {
     "essential": true,
     "image": "amazon/aws-for-fluent-bit:latest",
     "name": "log_router",
